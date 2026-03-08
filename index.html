@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional MIDI Piano Player</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://unpkg.com/@tonejs/midi"></script>
+    <link href="https://cdn.jsdelivr.net/npm/lucide-static@0.321.0/font/lucide.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        :root {
+            --accent: #a855f7; /* Purple Accent */
+            --accent-light: #d8b4fe;
+            --bg-gradient: linear-gradient(135deg, #0f0720 0%, #1e1b4b 100%);
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+        }
+
+        * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; overflow: hidden;
+        }
+
+        /* Background Decoration */
+        .blob {
+            position: absolute; width: 600px; height: 600px;
+            background: var(--accent); filter: blur(140px);
+            border-radius: 50%; z-index: -1; opacity: 0.15;
+            animation: move 25s infinite alternate;
+        }
+
+        @keyframes move {
+            from { transform: translate(-25%, -25%); }
+            to { transform: translate(25%, 25%); }
+        }
+
+        .player-wrapper {
+            width: 90%; max-width: 500px;
+            background: var(--glass);
+            backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+            border: 1px solid var(--glass-border);
+            border-radius: 40px; padding: 48px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            text-align: center; position: relative;
+        }
+
+        .visualizer {
+            width: 100%; height: 100px;
+            display: flex; align-items: center; justify-content: center;
+            gap: 3px; margin-bottom: 32px;
+        }
+
+        .dot {
+            width: 4px; height: 4px;
+            background: var(--accent); border-radius: 50%;
+            opacity: 0.3; transition: all 0.2s ease;
+        }
+
+        .dot.active {
+            opacity: 1; transform: scale(2.5);
+            box-shadow: 0 0 15px var(--accent);
+            background: var(--accent-light);
+        }
+
+        h1 {
+            font-size: 28px; font-weight: 800; margin: 0 0 8px 0;
+            letter-spacing: -1px;
+            background: linear-gradient(to bottom right, #fff, var(--accent-light));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        .file-info { font-size: 14px; color: var(--text-dim); margin-bottom: 32px; }
+
+        .upload-container { margin-bottom: 32px; }
+
+        .custom-file-upload {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 28px; background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 20px;
+            cursor: pointer; transition: all 0.3s;
+            color: var(--text-main); font-size: 15px; font-weight: 600;
+        }
+
+        .custom-file-upload:hover {
+            border-color: var(--accent);
+            background: rgba(168, 85, 247, 0.25);
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.2);
+        }
+
+        #file-input { display: none; }
+
+        .progress-section { width: 100%; margin-bottom: 40px; }
+
+        .progress-bar-bg {
+            width: 100%; height: 8px; background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px; cursor: pointer; position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            position: absolute; left: 0; top: 0; height: 100%; width: 0%;
+            background: var(--accent); box-shadow: 0 0 20px var(--accent);
+            transition: width 0.1s linear;
+        }
+
+        .time-display {
+            display: flex; justify-content: space-between;
+            font-size: 13px; color: var(--text-dim); margin-top: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .main-controls { display: flex; align-items: center; justify-content: center; gap: 28px; }
+
+        .btn-circle {
+            width: 60px; height: 60px; border-radius: 50%; border: none;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-size: 24px;
+        }
+
+        .btn-play {
+            width: 80px; height: 80px; background: var(--accent); color: white;
+            box-shadow: 0 15px 30px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn-play:hover { transform: scale(1.1); filter: brightness(1.1); }
+        .btn-play:disabled { background: #334155; box-shadow: none; cursor: not-allowed; opacity: 0.5; }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05); color: var(--text-main);
+            border: 1px solid var(--glass-border);
+        }
+
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.12); transform: translateY(-2px); border-color: var(--accent); }
+
+        #status-overlay {
+            position: fixed; top: 20px; right: 20px;
+            background: var(--accent); color: white;
+            padding: 12px 24px; border-radius: 12px;
+            font-weight: 700; font-size: 14px;
+            transform: translateX(200%); transition: transform 0.5s ease;
+            z-index: 100;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        #status-overlay.active { transform: translateX(0); }
+    </style>
+</head>
+<body>
+
+    <div class="blob"></div>
+
+    <div id="status-overlay">상태 메시지</div>
+
+    <div class="player-wrapper">
+        <div class="visualizer" id="visualizer"></div>
+
+        <h1>Purple MIDI Studio</h1>
+        <div class="file-info" id="file-name">MIDI 파일을 업로드하여 감상하세요.</div>
+
+        <div class="upload-container">
+            <label class="custom-file-upload">
+                <i class="lucide-music"></i>
+                <input type="file" id="file-input" accept=".mid,.midi">
+                MIDI 파일 선택
+            </label>
+        </div>
+
+        <div class="progress-section">
+            <div class="progress-bar-bg" id="progress-bg">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="time-display">
+                <span id="current-time">0:00</span>
+                <span id="duration-time">0:00</span>
+            </div>
+        </div>
+
+        <div class="main-controls">
+            <button class="btn-circle btn-secondary" id="stop-btn" title="Stop">
+                <i class="lucide-square"></i>
+            </button>
+            <button class="btn-circle btn-play" id="play-btn" disabled title="Play">
+                <i class="lucide-play" id="play-icon" style="margin-left: 4px;"></i>
+            </button>
+            <button class="btn-circle btn-secondary" id="restart-btn" title="Restart">
+                <i class="lucide-rotate-ccw"></i>
+            </button>
+        </div>
+    </div>
+
+<script>
+    // --- High Performance Piano Sampler ---
+    const sampler = new Tone.Sampler({
+        urls: {
+            A0: "A0.mp3", C1: "C1.mp3", "D#1": "Ds1.mp3", "F#1": "Fs1.mp3",
+            A1: "A1.mp3", C2: "C2.mp3", "D#2": "Ds2.mp3", "F#2": "Fs2.mp3",
+            A2: "A2.mp3", C3: "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3",
+            A3: "A3.mp3", C4: "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3",
+            A4: "A4.mp3", C5: "C5.mp3", "D#5": "Ds5.mp3", "F#5": "Fs5.mp3",
+            A5: "A5.mp3", C6: "C6.mp3", "D#6": "Ds6.mp3", "F#6": "Fs6.mp3",
+            A6: "A6.mp3", C7: "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
+            A7: "A7.mp3", C8: "C8.mp3"
+        },
+        release: 1.2,
+        baseUrl: "https://tonejs.github.io/audio/salamander/",
+        onload: () => {
+            showToast("🎹 피아노 음원 로드 완료!");
+            isSamplerLoaded = true;
+            checkReady();
+        }
+    }).toDestination();
+
+    const reverb = new Tone.Reverb({ decay: 3, wet: 0.15 }).toDestination();
+    sampler.connect(reverb);
+
+    let currentMidi = null;
+    let currentPart = null;
+    let totalDuration = 0;
+    let isPlaying = false;
+    let isSamplerLoaded = false;
+    let isFileLoaded = false;
+
+    // UI elements
+    const fileInput = document.getElementById('file-input');
+    const playBtn = document.getElementById('play-btn');
+    const playIcon = document.getElementById('play-icon');
+    const stopBtn = document.getElementById('stop-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const fileNameDisplay = document.getElementById('file-name');
+    const progressFill = document.getElementById('progress-fill');
+    const progressBg = document.getElementById('progress-bg');
+    const currentTimeDisplay = document.getElementById('current-time');
+    const durationDisplay = document.getElementById('duration-time');
+    const toast = document.getElementById('status-overlay');
+    const visualizer = document.getElementById('visualizer');
+
+    // Visualizer dots
+    for(let i=0; i<40; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        visualizer.appendChild(dot);
+    }
+    const dots = document.querySelectorAll('.dot');
+
+    // --- Push Notification Logic (Enhanced) ---
+    function setupNotifications() {
+        if ("Notification" in window) {
+            // 페이지 진입 후 상호작용 시 알림 권한 미리 요청
+            window.addEventListener('click', () => {
+                if (Notification.permission === "default") {
+                    Notification.requestPermission();
+                }
+            }, { once: true });
+
+            // 사용자가 페이지를 나갈 때(마우스가 상단으로 이동할 때) 메시지 표시
+            document.addEventListener('mouseleave', (e) => {
+                if (e.clientY < 0) { 
+                    showExitNotification();
+                }
+            });
+
+            // 탭 종료/새로고침 시 시도
+            window.addEventListener('beforeunload', () => {
+                showExitNotification();
+            });
+        }
+    }
+
+    function showExitNotification() {
+        if (Notification.permission === "granted") {
+            new Notification("Purple MIDI Studio", {
+                body: "당신을 위해서 나중에 더 많이 준비하겠습니다!",
+                icon: "https://cdn-icons-png.flaticon.com/512/3659/3659784.png"
+            });
+        }
+    }
+
+    // Initialize notification setup
+    setupNotifications();
+
+    function checkReady() {
+        if (isSamplerLoaded && isFileLoaded) {
+            playBtn.disabled = false;
+        }
+    }
+
+    function showToast(msg) {
+        toast.textContent = msg;
+        toast.classList.add('active');
+        setTimeout(() => toast.classList.remove('active'), 3000);
+    }
+
+    function formatTime(seconds) {
+        const min = Math.floor(seconds / 60);
+        const sec = Math.floor(seconds % 60);
+        return `${min}:${sec.toString().padStart(2, '0')}`;
+    }
+
+    async function handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        showToast("파일 분석 중...");
+        fileNameDisplay.textContent = file.name;
+        
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            currentMidi = new Midi(arrayBuffer);
+            
+            if (currentPart) currentPart.dispose();
+            Tone.Transport.cancel();
+            
+            totalDuration = currentMidi.duration;
+            durationDisplay.textContent = formatTime(totalDuration);
+            
+            const allNotes = [];
+            currentMidi.tracks.forEach(track => {
+                track.notes.forEach(note => {
+                    allNotes.push({
+                        time: note.time,
+                        name: note.name,
+                        duration: note.duration,
+                        velocity: note.velocity
+                    });
+                });
+            });
+
+            currentPart = new Tone.Part((time, note) => {
+                sampler.triggerAttackRelease(note.name, note.duration, time, note.velocity);
+                triggerVisualEffect();
+            }, allNotes).start(0);
+
+            isFileLoaded = true;
+            checkReady();
+            showToast("준비 완료! 재생을 시작하세요.");
+        } catch (err) {
+            showToast("오류: MIDI 파일을 로드할 수 없습니다.");
+        }
+    }
+
+    function triggerVisualEffect() {
+        const idx = Math.floor(Math.random() * dots.length);
+        dots[idx].classList.add('active');
+        setTimeout(() => dots[idx].classList.remove('active'), 150);
+    }
+
+    function togglePlay() {
+        if (!isSamplerLoaded) {
+            showToast("피아노 샘플을 로딩 중입니다...");
+            return;
+        }
+
+        if (isPlaying) {
+            Tone.Transport.pause();
+            playIcon.className = 'lucide-play';
+        } else {
+            Tone.start();
+            Tone.Transport.start();
+            playIcon.className = 'lucide-pause';
+        }
+        isPlaying = !isPlaying;
+        if (isPlaying) requestAnimationFrame(updateProgress);
+    }
+
+    function stopPlayback() {
+        Tone.Transport.stop();
+        Tone.Transport.seconds = 0;
+        isPlaying = false;
+        playIcon.className = 'lucide-play';
+        progressFill.style.width = '0%';
+        currentTimeDisplay.textContent = "0:00";
+    }
+
+    function updateProgress() {
+        if (!isPlaying) return;
+        
+        const current = Tone.Transport.seconds;
+        const progress = (current / totalDuration) * 100;
+        
+        progressFill.style.width = `${Math.min(progress, 100)}%`;
+        currentTimeDisplay.textContent = formatTime(current);
+
+        if (current >= totalDuration) {
+            stopPlayback();
+            return;
+        }
+        requestAnimationFrame(updateProgress);
+    }
+
+    // Event Listeners
+    fileInput.addEventListener('change', handleFileUpload);
+    playBtn.addEventListener('click', togglePlay);
+    stopBtn.addEventListener('click', stopPlayback);
+    restartBtn.addEventListener('click', () => {
+        Tone.Transport.seconds = 0;
+        if (!isPlaying) togglePlay();
+    });
+
+    progressBg.addEventListener('mousedown', (e) => {
+        if (!currentMidi) return;
+        const rect = progressBg.getBoundingClientRect();
+        const updatePos = (clientX) => {
+            const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            Tone.Transport.seconds = percent * totalDuration;
+            progressFill.style.width = `${percent * 100}%`;
+            currentTimeDisplay.textContent = formatTime(Tone.Transport.seconds);
+        };
+        updatePos(e.clientX);
+    });
+</script>
+
+</body>
+</html>
