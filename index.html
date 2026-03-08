@@ -254,15 +254,22 @@
     }
     const dots = document.querySelectorAll('.dot');
 
-    // --- Push Notification Logic (Enhanced) ---
+    // --- Push Notification Logic ---
     function setupNotifications() {
         if ("Notification" in window) {
-            // 페이지 진입 후 상호작용 시 알림 권한 미리 요청
-            window.addEventListener('click', () => {
+            // 접속 10초 후 알림 권한 요청
+            setTimeout(() => {
                 if (Notification.permission === "default") {
-                    Notification.requestPermission();
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            showToast("알림이 활성화되었습니다. 3분 뒤 메시지가 전송됩니다.");
+                            scheduleThreeMinuteNotification();
+                        }
+                    });
+                } else if (Notification.permission === "granted") {
+                    scheduleThreeMinuteNotification();
                 }
-            }, { once: true });
+            }, 10000);
 
             // 사용자가 페이지를 나갈 때(마우스가 상단으로 이동할 때) 메시지 표시
             document.addEventListener('mouseleave', (e) => {
@@ -276,6 +283,18 @@
                 showExitNotification();
             });
         }
+    }
+
+    function scheduleThreeMinuteNotification() {
+        // 3분(180,000ms) 뒤에 알람 전송
+        setTimeout(() => {
+            if (Notification.permission === "granted") {
+                new Notification("Purple MIDI Studio", {
+                    body: "곡을 더 준비했습니다! 다시 확인해보시겠어요?",
+                    icon: "https://cdn-icons-png.flaticon.com/512/3659/3659784.png"
+                });
+            }
+        }, 180000);
     }
 
     function showExitNotification() {
